@@ -1,1 +1,294 @@
+#include <Servo.h>
+Servo myservo1;
+Servo myservo2;
 
+int dir_l = 7, dir_r = 4, pwm_l = 6, pwm_r = 5, trig = 11, echo = 10;
+int count = 0;
+float kp = 0.2, kd = 1.55, kp_enc = 0.5 ;
+volatile long dec_l = 0, dec_r = 0;
+int cub[5] = {0, 0, 0, 0, 0};
+int sum_dec = 0;
+
+void move(int m_l, int m_r){
+  digitalWrite(dir_l, m_l > 0);
+  digitalWrite(dir_r, m_r < 0);
+  analogWrite(pwm_l, constrain(abs(m_l), 0, 255));
+  analogWrite(pwm_r, constrain(abs(m_r), 0, 255));
+}
+
+
+
+
+void enc_l(){
+  dec_l += digitalRead(8) ? 1 : -1;
+}
+
+void enc_r(){
+  dec_r += digitalRead(9) ? -1 : 1;
+}
+
+
+void stop(){
+  uint32_t t = millis();
+  while (millis() - t < 150){
+    move(-100, -100);
+    delay(10);
+    move(100, 100);
+    delay(10);
+  }
+  move(0, 0);
+}
+
+void stop_turn(){
+  uint32_t t = millis();
+  while (millis() - t < 150){
+    move(100, -100);
+    delay(10);
+    move(-100, 100);
+    delay(10);
+  }
+  move(0, 0);
+}
+
+void move_enc(){
+  int err = dec_l - dec_r;
+  int u = err * kp_enc;
+  move(100 - u, 100 + u);
+}
+
+
+void move_black(int dec = 240){
+  count = 0;
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < dec or abs(dec_r) < dec){
+    move_enc();
+  }
+  stop();
+}
+
+void otkat(int dec = 240){
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < dec or abs(dec_r) < dec){
+    int err = (dec_l - dec_r) * kp_enc;
+    move(-100 - err, -100 + err);
+  }
+  stop();
+}
+
+void turn_right(int dec = 94){
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < dec){
+    move(100, -100);
+  }
+  stop_turn();
+}
+
+void turn_left(int dec = 94){
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < dec){
+    move(-100, 100);
+  }
+  stop_turn();
+}
+void turn_180(){
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < 500){
+    move(-100, 100);
+  }
+  stop_turn();
+}
+
+
+
+void turn_540(){
+  dec_l = dec_r = 0;
+  while (abs(dec_l) < (1500)){
+    move(100, -100);
+  }
+  stop_turn();
+
+}
+
+
+
+int uz() {
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(trig, LOW);
+  delayMicroseconds(10);
+  digitalWrite(trig, HIGH);
+  int i = pulseIn(echo, HIGH, 5000); 
+  if (i == 0) return 200;
+  // delay(5);
+  return i / 58;
+}
+
+void move_to_cube(){
+  int count = 0;
+  dec_l = dec_r = 0;
+  while (uz() > 10){
+    move_enc();
+  }
+  stop();
+  sum_dec += ((dec_l + dec_r) / 2);
+}
+void servo_up(){
+  myservo1.write(0);
+  delay(1000);
+}
+void servo_down(){
+  myservo1.write(80);
+  delay(1000);
+}
+void setup() {
+  for (int i = 4; i < 8; i++){
+    pinMode(i, OUTPUT);
+  }
+  pinMode(13, INPUT);
+  pinMode(echo, INPUT);
+  pinMode(trig, OUTPUT);
+  attachInterrupt(0, enc_l, FALLING);
+  attachInterrupt(1, enc_r, FALLING);
+  // myservo.attach(A3);
+
+  Serial.begin(115200);
+  // servo_up();
+  myservo1.attach(12);
+  myservo2.attach(11);
+  servo_up();
+}
+
+void stenka(){
+  while (ik() > 400){
+    move_enc();
+  }
+  stop();
+  move_black(100);
+}
+
+void pusto(){
+  dec_l = dec_r = 0;
+  while (ik() < 400){
+    move_enc();
+  }
+  stop();
+}
+
+int ik(){
+  return analogRead(A5);
+}
+
+
+bool flag = false, start = false, flag_pr = false, start_long = false;
+int btn_pin = 13;
+int count_small = 0, count_big = 0;
+uint32_t t = millis();
+void button(){
+  if (!flag and !digitalRead(btn_pin)) {
+    flag = true;
+    t = millis();
+  } 
+  if (flag and digitalRead(btn_pin) and (millis() - t) < 300) {
+    flag = false;
+    count_small++;
+  }
+  if (flag and digitalRead(btn_pin) and (millis() - t) > 300 and (millis() - t) < 2000) {
+    flag = false;
+    count_big++;
+  }
+  if (flag and digitalRead(btn_pin) and (millis() - t) > 2000) {
+    flag = false;
+    start = true;
+  }
+}
+
+void turn_p(){
+  dec_r = 0;
+  while (abs(dec_r) < 470){
+    move(0, 100);
+  }
+  stop();
+}
+
+void turn_p_back(){
+  dec_r = 0;
+  while (abs(dec_r) < 470){
+    move(0, -100);
+  }
+  stop();
+}
+
+void turn_sink(){
+  turn_right();
+  while (sensor() < 500){
+    move(-100, 100);
+  }
+  stop_turn();
+}
+
+int sensor(){
+  return map(analogRead(A0), 23, 296, 100, 900);
+}
+int arr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+void loop() {
+  // Serial.print(dec_l);
+  // Serial.print(" ");
+  // Serial.println(dec_r);
+  // // turn_sink();
+  for (int i = 0; i < 3; i++){
+    move_black();
+    servo_down();
+    otkat();
+    turn_right();
+    move_black(318);
+    servo_up();
+    otkat(318);
+    turn_right();
+  }
+  // turn_right(40);
+    move_black();
+    servo_down();
+    otkat();
+    turn_left();
+    move_black(350);
+    servo_up();
+    otkat(350);
+    turn_right();
+  delay(100000000000);
+}
+  // for (int i = 0; i < 4; i++){
+  //   move_black(600);
+  //   turn_left(80);
+  //   move_black(380);
+  //   turn_p();
+  //   servo_down();
+  //   turn_p_back();
+  //   otkat(380);
+  //   turn_right(80);
+  //   otkat(600);
+  //   turn_right();
+  //   turn_right();
+  //   turn_right();
+  //   turn_right(20);
+  //   move_black();
+  //   servo_up();
+  //   otkat();
+  //   turn_left();
+  // }
+
+  // move_black(600);
+  // turn_left();
+  // move_black(350);
+  // turn_p();
+  // servo_down();
+  // turn_p();
+  // delay(123456789);
+
+
+
+
+  // myservo1.write(125);
+
+
+
+// }
